@@ -18,7 +18,7 @@ class CalculatorController extends Controller
     }
 
     public function calculate(Request $request){
-        var_dump($request->input());
+    //    var_dump($request->input());
 
         $carrierCode = Carrier::find($request->input('carrier'))->code;
         $originCode = Airport::find($request->input('origin'))->code;
@@ -39,7 +39,29 @@ class CalculatorController extends Controller
         // Pricing group monthCode*90+routeGroup*6+carrierCode*2+weekDayCode-98
         $pricingGroup = $monthCode*90+$routeGroup*6+$carrierCode*2+$weekDayCode-98;
 
-        return response()->json(['cc' => $pricingGroup], 201);
+        $unitCost = DB::table('variable_costs')->
+        where('pricing_group', $pricingGroup)->
+        where('date', $date->year . '-' . $month . '-01')->
+        value('value');
+
+        $multiplier = DB::table('stopovers')->
+        where('count', $request->input('stops'))->
+        value('multiplier');
+
+        $premium = $request->input('price') * $unitCost * $multiplier * $request->input('weather');
+        $premium = round($premium, 2);
+
+        $parametersData = DB::table('parameters')->get();
+        $parameters = [];
+        foreach($parametersData as $parameter){
+            $parameters[$parameter->name] = ['value' => $parameter->value, 'currency' => $parameter->currency];
+        }
+
+        $totalCost = $premium + $parameters['Fixed addition']['value'];
+        $minPremium = $parameters['Minimum premium']['value'];
+        $finalCost = max($totalCost, $minPremium);
+
+        return response()->json(['cc' => $finalCost], 201);
     }
 
 }
